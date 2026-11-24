@@ -75,6 +75,18 @@ jobs:
         if: ${{ inputs.target != 'rules-and-indexes' && inputs.target != 'functions' }}
         working-directory: ${{ env.PROJECT_DIR }}/admin
         run: npm ci --no-audit --no-fund && npm test && npm run build
+      - name: Stage app-ads.txt for hosting
+        # AdMob crawls https://gen-z-code-55caf.web.app/app-ads.txt (the hosting root).
+        # The admin build outputs to admin/dist/admin/, so a file in admin/public/ would
+        # land at /admin/app-ads.txt (wrong). The source lives at the project root and
+        # is copied into the hosting public dir (admin/dist/) here, before deploy.
+        if: ${{ inputs.target != 'rules-and-indexes' && inputs.target != 'functions' }}
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          [ -f app-ads.txt ] || { echo "::error::app-ads.txt is missing from the project root."; exit 1; }
+          cp app-ads.txt admin/dist/app-ads.txt
+          echo "app-ads.txt staged at admin/dist/app-ads.txt (served at https://gen-z-code-55caf.web.app/app-ads.txt):"
+          cat admin/dist/app-ads.txt
       - name: Build Cloud Functions
         if: ${{ inputs.target == 'everything' || inputs.target == 'functions' || inputs.target == 'daily-code' || inputs.target == 'community' }}
         working-directory: ${{ env.PROJECT_DIR }}/functions
@@ -82,7 +94,7 @@ jobs:
       - name: Test community payments and scheduling
         if: ${{ inputs.target == 'everything' || inputs.target == 'functions' || inputs.target == 'daily-code' || inputs.target == 'community' }}
         working-directory: ${{ env.PROJECT_DIR }}
-        run: npx --yes firebase-tools@15 emulators:exec --only auth,firestore --project demo-genz-feature-core "node --test --test-concurrency=1 functions/tests/community-features.test.cjs functions/tests/vps-api.test.cjs functions/tests/cloud-callable.test.cjs functions/tests/credits-daily.fake.test.cjs functions/tests/play-purchases.fake.test.cjs"
+        run: npx --yes firebase-tools@15 emulators:exec --only auth,firestore --project demo-genz-feature-core "node --test --test-concurrency=1 functions/tests/community-features.test.cjs functions/tests/vps-api.test.cjs functions/tests/cloud-callable.test.cjs functions/tests/messaging.test.cjs functions/tests/messaging-realtime.test.cjs functions/tests/credits-daily.fake.test.cjs functions/tests/play-purchases.fake.test.cjs"
       - name: Load deploy credentials
         env:
           SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
@@ -100,7 +112,7 @@ jobs:
             admin-portal) ONLY="hosting" ;;
             functions) ONLY="functions" ;;
             daily-code) ONLY="firestore:rules,firestore:indexes,functions:communityFeature,functions:publishDailyCodes,hosting" ;;
-            community) ONLY="firestore:rules,firestore:indexes,functions:communityFeature,functions:publishDailyCodes,functions:cleanupContributions,functions:admobReward,hosting" ;;
+            community) ONLY="firestore:rules,firestore:indexes,functions:communityFeature,functions:deliverInboxAlert,functions:publishDailyCodes,functions:cleanupContributions,functions:admobReward,hosting" ;;
             everything) ONLY="firestore:rules,firestore:indexes,hosting,functions" ;;
             *) echo "Unknown deployment target: $TARGET"; exit 1 ;;
           esac
